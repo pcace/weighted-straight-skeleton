@@ -1,4 +1,4 @@
-# straight-skeleton
+# weihhted-straight-skeleton
 
 ![](https://i.imgur.com/bowQUJY.png)
 
