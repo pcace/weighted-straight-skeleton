@@ -1,4 +1,4 @@
-# weihhted-straight-skeleton
+# weighted-straight-skeleton
 
 ![](https://i.imgur.com/bowQUJY.png)
 
