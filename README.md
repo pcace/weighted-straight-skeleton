@@ -26,8 +26,14 @@ This library supports both arrays of points (`SkeletonBuilder.buildFromPolygon`)
 
 ### Example
 
+add to your package.json
+```json
+    "weighted-straight-skeleton": "github:pcace/weighted-straight-skeleton"
+``` 
+then run `npm install`
+
 ```typescript
-import {SkeletonBuilder} from 'straight-skeleton';
+import { SkeletonBuilder, Skeleton } from 'weighted-straight-skeleton'
 
 // Contains two rings: outer and inner.
 const polygon = [
