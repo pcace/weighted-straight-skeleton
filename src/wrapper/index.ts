@@ -7,7 +7,7 @@ interface WasmModule {
 	HEAPF32: Float32Array;
 	_malloc(size: number): number;
 	_free(ptr: number): void;
-	_create_straight_skeleton(ptr: number): number;
+	_create_weighted_straight_skeleton(ptr: number, weightsPtr: number, rowSizePtr: number, rowCount: number): number;
 }
 
 /**
@@ -46,11 +46,15 @@ export class SkeletonBuilder {
 	 * Outer rings must be counter-clockwise oriented and inner rings must be clockwise oriented.
 	 * All rings must be weakly simple.
 	 * Each ring must have a duplicate of the first vertex at the end.
+	 * The weights Array must represent the length of each 
+	 * polygonring - 1 like so : [[outerRing.length-1], [holeRing.length - 1]]
 	 * @param polygon The GeoJSON polygon.
+	 * @param weights The weights for each vertex. 
 	 */
-	public static buildFromGeoJSONPolygon(polygon: GeoJSON.Polygon): Skeleton {
+	public static buildFromGeoJSONPolygon(polygon: GeoJSON.Polygon, weights?: number[][]): Skeleton {
+
 		this.checkModule();
-		return this.buildFromPolygon(polygon.coordinates);
+		return this.buildFromPolygon(polygon.coordinates, weights);
 	}
 
 	/**
@@ -60,16 +64,49 @@ export class SkeletonBuilder {
 	 * All rings must be weakly simple.
 	 * Each ring must have a duplicate of the first vertex at the end.
 	 * @param coordinates The polygon represented as an array of rings.
+	 * @param weights The weights for each vertex.
 	 */
-	public static buildFromPolygon(coordinates: number[][][]): Skeleton {
+	public static buildFromPolygon(coordinates: number[][][], weights?: number[][]): Skeleton {
+
+		if (!weights) {
+			weights = coordinates.map(ring => new Array(ring.length).fill(1));
+		} else {
+			// Validate the weights length
+			if (weights.length !== coordinates.length) {
+				throw new Error('Weights array length does not match the number of rings in the polygon.');
+			}
+			for (let i = 0; i < weights.length; i++) {
+				if (weights[i].length !== coordinates[i].length - 1) {
+					throw new Error(`Weights array length for ring ${i} does not match the number of points in the ring.`);
+				}
+			}
+		}
+
+
 		this.checkModule();
 
 		const inputBuffer = this.serializeInput(coordinates);
 		const inputPtr = this.module._malloc(inputBuffer.byteLength);
 		this.module.HEAPU8.set(new Uint8Array(inputBuffer), inputPtr);
 
-		const ptr = this.module._create_straight_skeleton(inputPtr);
+		const rowCount = weights.length;
 
+		// Flatten the weights array into a 1D Float32Array
+		const flatWeights = weights.flat();
+		const weightsArray = new Float32Array(flatWeights);
+
+		// Create an array to store sizes of subarrays
+		const rowSizes = new Int32Array(weights.map(row => row.length));
+
+		// Allocate memory in WASM for weights data
+		const weightsPtr = this.module._malloc(weightsArray.length * 4); // Each float is 4 bytes
+		this.module.HEAPF32.set(weightsArray, weightsPtr / 4);
+
+		// Allocate memory in WASM for row sizes
+		const rowSizesPtr = this.module._malloc(rowSizes.length * 4); // Each int is 4 bytes
+		this.module.HEAPU32.set(rowSizes, rowSizesPtr / 4);
+
+		const ptr = this.module._create_weighted_straight_skeleton(inputPtr, weightsPtr, rowSizesPtr, rowCount);
 		if (ptr === 0) {
 			return null;
 		}
@@ -106,8 +143,9 @@ export class SkeletonBuilder {
 
 		this.module._free(ptr);
 		this.module._free(inputPtr);
+		this.module._free(weightsPtr);
 
-		return {vertices, polygons};
+		return { vertices, polygons };
 	}
 
 	private static checkModule(): void {
@@ -137,7 +175,6 @@ export class SkeletonBuilder {
 		}
 
 		uint32Array[offset++] = 0;
-
 		return float32Array.buffer;
 	}
 }
