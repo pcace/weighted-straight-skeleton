@@ -2,18 +2,14 @@
 
 ![](https://i.imgur.com/bowQUJY.png)
 
-This is a TypeScript library that wraps the basic functionality of CGAL's [straight skeleton implementation](https://doc.cgal.org/latest/Straight_skeleton_2/index.html) using Wasm (WebAssembly).
-You can use this library to generate unweighted straight skeletons of polygons with or without holes.
+This is a TypeScript library that wraps the basic functionality of CGAL's [weighted straight skeleton implementation](https://www.cgal.org/2023/05/09/improved_straight_skeleton/) using Wasm (WebAssembly).
+You can use this library to generate weighted straight skeletons of polygons with or without holes.
 
 If you are interested in a less robust but more fast straight skeleton implementation that's written in pure TypeScript, check out [v1](https://github.com/StrandedKitty/straight-skeleton/tree/v1) of this library.
 
-## Demo
-
-[Live playground](https://strandedkitty.github.io/straight-skeleton/example/)
-
 ## Installation
 
-`npm i straight-skeleton`
+`npm i weighted-straight-skeleton`
 
 ## Usage
 
@@ -26,6 +22,7 @@ This library supports both arrays of points (`SkeletonBuilder.buildFromPolygon`)
 - Outer rings must be counter-clockwise oriented and inner rings must be clockwise oriented.
 - All rings must be weakly simple.
 - Each ring must have a duplicate of the first vertex at the end.
+- If weights are provided, the number of weights must match the number of vertices in the polygon.
 
 ### Example
 
@@ -53,9 +50,15 @@ const polygon = [
 	]
 ];
 
+// optionally send weights for each polygon vertex
+const weights = [
+	[1.5, 1.0, 1.5, 1.8, 1.5, 1.8, 1.5, 1.8, 1.5],
+	[1.5, 1.8, 1.5, 1.5, 1.5]
+];
+
 // Initialize the Wasm module by calling init() once.
 SkeletonBuilder.init().then(() => {
-	const result = SkeletonBuilder.buildFromPolygon(polygon);
+	const result = SkeletonBuilder.buildFromPolygon(polygon, weights);
 	
 	// Check if the skeleton was successfully constructed
 	if (result !== null) {
