@@ -72,6 +72,8 @@ SkeletonBuilder.init().then(() => {
 
 ## Development
 
+Note: Tested with emscripten version 3.1.16
+
 1. Clone this repository.
 2. Run `npm i` to install dependencies.
 3. Optionally, rebuild the Wasm module:

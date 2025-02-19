@@ -4,7 +4,7 @@ mkdir -p lib/downloads
 
 # ##################################### CGAL #####################################
 
-CGAL_VERSION=5.6
+CGAL_VERSION=5.6.2
 CGAL_NAME=CGAL-$CGAL_VERSION.tar.xz
 CGAL_URL=https://github.com/CGAL/cgal/releases/download/v$CGAL_VERSION/$CGAL_NAME
 
@@ -15,10 +15,9 @@ tar -xf lib/downloads/$CGAL_NAME -C lib
 echo "Done"
 
 # ##################################### BOOST #####################################
-
-BOOST_VERSION=1.81.0
-BOOST_NAME=boost_1_81_0.tar.gz
-BOOST_URL=https://boostorg.jfrog.io/artifactory/main/release/$BOOST_VERSION/source/$BOOST_NAME
+BOOST_VERSION=1.87.0
+BOOST_NAME=boost_$BOOST_VERSION.tar.gz
+BOOST_URL=https://archives.boost.io/release/$BOOST_VERSION/source/boost_1_87_0.tar.gz
 
 echo "Downloading "$BOOST_NAME
 wget -nc -q --show-progress -O lib/downloads/$BOOST_NAME $BOOST_URL

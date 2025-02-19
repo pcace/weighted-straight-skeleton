@@ -4,13 +4,14 @@ project(straight_skeleton)
 
 set(CMAKE_CXX_STANDARD 20)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib/CGAL-5.6/include)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib/boost_1_81_0)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib/CGAL-5.6.2/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib/boost_1_87_0)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib/gmp-6.2.1)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/lib/mpfr-4.2.0/src)
 
-set(CGAL_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/lib/CGAL-5.6/include)
-set(BOOST_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/lib/boost_1_81_0)
+set(CGAL_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/lib/CGAL-5.6.2/include)
+set(BOOST_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/lib/boost_1_87_0)
+
 
 add_executable(main main.cpp)
 
