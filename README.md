@@ -1,11 +1,9 @@
 # weighted-straight-skeleton
 
-![](https://i.imgur.com/bowQUJY.png)
+![](https://i.imgur.com/usIo8zU.png)
 
 This is a TypeScript library that wraps the basic functionality of CGAL's [weighted straight skeleton implementation](https://www.cgal.org/2023/05/09/improved_straight_skeleton/) using Wasm (WebAssembly).
 You can use this library to generate weighted straight skeletons of polygons with or without holes.
-
-If you are interested in a less robust but more fast straight skeleton implementation that's written in pure TypeScript, check out [v1](https://github.com/StrandedKitty/straight-skeleton/tree/v1) of this library.
 
 ## Installation
 
