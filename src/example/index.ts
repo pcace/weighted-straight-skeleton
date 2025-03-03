@@ -11,7 +11,52 @@ const samples = [{
     weights: [[0.1, 1, 1, 1, 80]],
     angles: [[45, 60, 89, 89, 89]],
     height: 10
-}];
+},
+// Rectangle example
+{
+    polygon: {
+        type: "Polygon",
+        coordinates: [[[0, 0], [10, 0], [10, 8], [0, 8], [0, 0]]]
+    },
+    weights: [[1, 1, 1, 1]],
+    angles: [[90, 90, 90, 90]],
+    height: 5
+},
+{
+    polygon: {
+        type: "Polygon",
+        coordinates: [[[0, 0], [10, 0], [10, 8], [0, 8], [0, 0]], 
+                     [[2, 2], [2, 6], [8, 6], [8, 2], [2, 2]]]
+    },
+    weights: [[1, 1, 1, 1], [1, 1, 1, 1]],
+    angles: [
+        [
+            90,
+            45,
+            90,
+            45
+        ],
+        [
+            90,
+            45,
+            90,
+            45
+        ]
+    ],    height: 5
+},
+// Triangle example
+{
+    polygon: {
+        type: "Polygon",
+        coordinates: [[[0, 0], [10, 0], [5, 8], [0, 0]]]
+    },
+    weights: [[0.5, 1.5, 0.8]],
+    angles: [[60, 70, 50]],
+    height: 7
+},
+
+
+];
 
 let activeMesh: Mesh = null;
 let meshBox: { minX: number, minY: number, maxX: number, maxY: number } = null;
@@ -159,8 +204,8 @@ MeshBuilder.init().then(() => {
         // Zentriere das Modell
         const offset = new THREE.Vector3(
             -(meshBox.maxX + meshBox.minX) / 2,
-            -(meshBox.maxY + meshBox.minY) / 2,
-            0
+            0,
+            -(meshBox.maxY + meshBox.minY) / 2
         );
         const scale = 1 / Math.max(meshBox.maxX - meshBox.minX, meshBox.maxY - meshBox.minY);
 
@@ -180,15 +225,15 @@ MeshBuilder.init().then(() => {
                 const v2 = activeMesh.vertices[face[i + 1]];
 
                 // Berechne die Face-Normal (für flat shading)
-                const vA = new THREE.Vector3(v1[0] - v0[0], v1[1] - v0[1], v1[2] - v0[2]);
-                const vB = new THREE.Vector3(v2[0] - v0[0], v2[1] - v0[1], v2[2] - v0[2]);
+                const vA = new THREE.Vector3(v1[0] - v0[0], v1[2] - v0[2], v1[1] - v0[1]);
+                const vB = new THREE.Vector3(v2[0] - v0[0], v2[2] - v0[2], v2[1] - v0[1]);
                 const normal = new THREE.Vector3().crossVectors(vA, vB).normalize();
 
                 // Füge die Vertices zum Array hinzu
                 vertices.push(
-                    (v0[0] + offset.x) * scale, (v0[1] + offset.y) * scale, v0[2] * scale,
-                    (v1[0] + offset.x) * scale, (v1[1] + offset.y) * scale, v1[2] * scale,
-                    (v2[0] + offset.x) * scale, (v2[1] + offset.y) * scale, v2[2] * scale
+                    (v0[0] + offset.x) * scale, v0[2] * scale, (v0[1] + offset.z) * scale,
+                    (v1[0] + offset.x) * scale, v1[2] * scale, (v1[1] + offset.z) * scale,
+                    (v2[0] + offset.x) * scale, v2[2] * scale, (v2[1] + offset.z) * scale
                 );
 
                 // Füge für jede Vertex die gleiche Normal hinzu (flat shading)
@@ -251,14 +296,14 @@ MeshBuilder.init().then(() => {
         try {
             if (useAngles && inputJSON.angles) {
                 mesh = MeshBuilder.buildFromGeoJSONPolygonWithAngles(
-                    inputJSON.polygon, 
-                    inputJSON.angles, 
+                    inputJSON.polygon,
+                    inputJSON.angles,
                     height
                 );
             } else {
                 mesh = MeshBuilder.buildFromGeoJSONPolygonWithWeights(
-                    inputJSON.polygon, 
-                    inputJSON.weights, 
+                    inputJSON.polygon,
+                    inputJSON.weights,
                     height
                 );
             }
