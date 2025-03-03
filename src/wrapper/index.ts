@@ -2,179 +2,234 @@
 import Module from '../core/build/main.js';
 
 interface WasmModule {
-	HEAPU8: Uint8Array;
-	HEAPU32: Uint32Array;
-	HEAPF32: Float32Array;
-	_malloc(size: number): number;
-	_free(ptr: number): void;
-	_create_weighted_straight_skeleton(ptr: number, weightsPtr: number, rowSizePtr: number, rowCount: number): number;
+    HEAPU8: Uint8Array;
+    HEAPU32: Uint32Array;
+    HEAPF32: Float32Array;
+    _malloc(size: number): number;
+    _free(ptr: number): void;
+    _create_weighted_straight_skeleton(ptr: number, weightsPtr: number, rowSizePtr: number, rowCount: number, height: number): number;
+    _create_angle_straight_skeleton(ptr: number, anglesPtr: number, rowSizePtr: number, rowCount: number, height: number): number;
 }
 
 /**
- * Each skeleton vertex is represented by x, y and time. Time can be used to calculate z coordinate.
+ * Each mesh vertex is represented by x, y and z coordinates.
  */
 export type Vertex = [number, number, number];
 
 /**
- * Each polygon is represented by an array of vertex indices.
+ * Each face is represented by an array of vertex indices.
  */
-export type Polygon = number[];
+export type Face = number[];
 
 /**
- * Straight skeleton calculation result.
+ * 3D mesh representation result.
  */
-export interface Skeleton {
-	vertices: Vertex[];
-	polygons: Polygon[];
+export interface Mesh {
+    vertices: Vertex[];
+    faces: Face[];
 }
 
-export class SkeletonBuilder {
-	private static module: WasmModule = null;
+export class MeshBuilder {
+    private static module: WasmModule = null;
 
-	/**
-	 * Initializes the WebAssembly module. Must be called before any other method.
-	 */
-	public static async init(): Promise<void> {
-		return Module().then((library: WasmModule) => {
-			this.module = library;
-		});
-	}
+    /**
+     * Initializes the WebAssembly module. Must be called before any other method.
+     */
+    public static async init(): Promise<void> {
+        return Module().then((library: WasmModule) => {
+            this.module = library;
+        });
+    }
 
-	/**
-	 * Builds a skeleton from a GeoJSON polygon.
-	 * The polygon must have at least one ring. The first ring is always the outer ring, and the rest are inner rings.
-	 * Outer rings must be counter-clockwise oriented and inner rings must be clockwise oriented.
-	 * All rings must be weakly simple.
-	 * Each ring must have a duplicate of the first vertex at the end.
-	 * The weights Array must represent the length of each 
-	 * polygonring - 1 like so : [[outerRing.length-1], [holeRing.length - 1]]
-	 * @param polygon The GeoJSON polygon.
-	 * @param weights The weights for each vertex. 
-	 */
-	public static buildFromGeoJSONPolygon(polygon: GeoJSON.Polygon, weights?: number[][]): Skeleton {
+    /**
+     * Builds a 3D mesh from a GeoJSON polygon using weights for each edge.
+     * The polygon must have at least one ring. The first ring is always the outer ring, and the rest are inner rings.
+     * Outer rings must be counter-clockwise oriented and inner rings must be clockwise oriented.
+     * All rings must be weakly simple.
+     * Each ring must have a duplicate of the first vertex at the end.
+     * @param polygon The GeoJSON polygon.
+     * @param weights The weights for each edge. 
+     * @param height The maximum height of the extrusion.
+     */
+    public static buildFromGeoJSONPolygonWithWeights(polygon: GeoJSON.Polygon, weights: number[][], height: number = 10): Mesh {
+        this.checkModule();
+        return this.buildFromPolygonWithWeights(polygon.coordinates, weights, height);
+    }
 
-		this.checkModule();
-		return this.buildFromPolygon(polygon.coordinates, weights);
-	}
+    /**
+     * Builds a 3D mesh from a polygon represented as an array of rings using weights for each edge.
+     * @param coordinates The polygon represented as an array of rings.
+     * @param weights The weights for each edge.
+     * @param height The maximum height of the extrusion.
+     */
+    public static buildFromPolygonWithWeights(coordinates: number[][][], weights: number[][], height: number = 10): Mesh {
+        this.validateWeights(coordinates, weights);
+        this.checkModule();
 
-	/**
-	 * Builds a skeleton from a polygon represented as an array of rings.
-	 * The polygon must have at least one ring. The first ring is always the outer ring, and the rest are inner rings.
-	 * Outer rings must be counter-clockwise oriented and inner rings must be clockwise oriented.
-	 * All rings must be weakly simple.
-	 * Each ring must have a duplicate of the first vertex at the end.
-	 * @param coordinates The polygon represented as an array of rings.
-	 * @param weights The weights for each vertex.
-	 */
-	public static buildFromPolygon(coordinates: number[][][], weights?: number[][]): Skeleton {
+        const inputBuffer = this.serializeInput(coordinates);
+        const inputPtr = this.module._malloc(inputBuffer.byteLength);
+        this.module.HEAPU8.set(new Uint8Array(inputBuffer), inputPtr);
 
-		if (!weights) {
-			weights = coordinates.map(ring => new Array(ring.length).fill(1));
-		} else {
-			// Validate the weights length
-			if (weights.length !== coordinates.length) {
-				throw new Error('Weights array length does not match the number of rings in the polygon.');
-			}
-			for (let i = 0; i < weights.length; i++) {
-				if (weights[i].length !== coordinates[i].length - 1) {
-					throw new Error(`Weights array length for ring ${i} does not match the number of points in the ring.`);
-				}
-			}
-		}
+        const rowCount = weights.length;
 
+        // Flatten the weights array into a 1D Float32Array
+        const flatWeights = weights.flat();
+        const weightsArray = new Float32Array(flatWeights);
 
-		this.checkModule();
+        // Create an array to store sizes of subarrays
+        const rowSizes = new Int32Array(weights.map(row => row.length));
 
-		const inputBuffer = this.serializeInput(coordinates);
-		const inputPtr = this.module._malloc(inputBuffer.byteLength);
-		this.module.HEAPU8.set(new Uint8Array(inputBuffer), inputPtr);
+        // Allocate memory in WASM for weights data
+        const weightsPtr = this.module._malloc(weightsArray.length * 4); // Each float is 4 bytes
+        this.module.HEAPF32.set(weightsArray, weightsPtr / 4);
 
-		const rowCount = weights.length;
+        // Allocate memory in WASM for row sizes
+        const rowSizesPtr = this.module._malloc(rowSizes.length * 4); // Each int is 4 bytes
+        this.module.HEAPU32.set(rowSizes, rowSizesPtr / 4);
 
-		// Flatten the weights array into a 1D Float32Array
-		const flatWeights = weights.flat();
-		const weightsArray = new Float32Array(flatWeights);
+        const ptr = this.module._create_weighted_straight_skeleton(inputPtr, weightsPtr, rowSizesPtr, rowCount, height);
+        
+        return this.parseMeshResult(ptr, inputPtr, weightsPtr, rowSizesPtr);
+    }
 
-		// Create an array to store sizes of subarrays
-		const rowSizes = new Int32Array(weights.map(row => row.length));
+    /**
+     * Builds a 3D mesh from a GeoJSON polygon using angles for each edge.
+     * @param polygon The GeoJSON polygon.
+     * @param angles The angles for each edge (in degrees).
+     * @param height The maximum height of the extrusion.
+     */
+    public static buildFromGeoJSONPolygonWithAngles(polygon: GeoJSON.Polygon, angles: number[][], height: number = 10): Mesh {
+        this.checkModule();
+        return this.buildFromPolygonWithAngles(polygon.coordinates, angles, height);
+    }
 
-		// Allocate memory in WASM for weights data
-		const weightsPtr = this.module._malloc(weightsArray.length * 4); // Each float is 4 bytes
-		this.module.HEAPF32.set(weightsArray, weightsPtr / 4);
+    /**
+     * Builds a 3D mesh from a polygon represented as an array of rings using angles for each edge.
+     * @param coordinates The polygon represented as an array of rings.
+     * @param angles The angles for each edge (in degrees).
+     * @param height The maximum height of the extrusion.
+     */
+    public static buildFromPolygonWithAngles(coordinates: number[][][], angles: number[][], height: number = 10): Mesh {
+        this.validateWeights(coordinates, angles);
+        this.checkModule();
 
-		// Allocate memory in WASM for row sizes
-		const rowSizesPtr = this.module._malloc(rowSizes.length * 4); // Each int is 4 bytes
-		this.module.HEAPU32.set(rowSizes, rowSizesPtr / 4);
+        const inputBuffer = this.serializeInput(coordinates);
+        const inputPtr = this.module._malloc(inputBuffer.byteLength);
+        this.module.HEAPU8.set(new Uint8Array(inputBuffer), inputPtr);
 
-		const ptr = this.module._create_weighted_straight_skeleton(inputPtr, weightsPtr, rowSizesPtr, rowCount);
-		if (ptr === 0) {
-			return null;
-		}
+        const rowCount = angles.length;
 
-		let offset = ptr / 4;
-		const arrayU32 = this.module.HEAPU32;
-		const arrayF32 = this.module.HEAPF32;
+        // Flatten the angles array into a 1D Float32Array
+        const flatAngles = angles.flat();
+        const anglesArray = new Float32Array(flatAngles);
 
-		const vertices: Vertex[] = [];
-		const polygons: number[][] = [];
+        // Create an array to store sizes of subarrays
+        const rowSizes = new Int32Array(angles.map(row => row.length));
 
-		const vertexCount = arrayU32[offset++];
+        // Allocate memory in WASM for angles data
+        const anglesPtr = this.module._malloc(anglesArray.length * 4); // Each float is 4 bytes
+        this.module.HEAPF32.set(anglesArray, anglesPtr / 4);
 
-		for (let i = 0; i < vertexCount; i++) {
-			const x = arrayF32[offset++];
-			const y = arrayF32[offset++];
-			const time = arrayF32[offset++];
+        // Allocate memory in WASM for row sizes
+        const rowSizesPtr = this.module._malloc(rowSizes.length * 4); // Each int is 4 bytes
+        this.module.HEAPU32.set(rowSizes, rowSizesPtr / 4);
 
-			vertices.push([x, y, time]);
-		}
+        const ptr = this.module._create_angle_straight_skeleton(inputPtr, anglesPtr, rowSizesPtr, rowCount, height);
+        
+        return this.parseMeshResult(ptr, inputPtr, anglesPtr, rowSizesPtr);
+    }
 
-		let polygonVertexCount = arrayU32[offset++];
+    /**
+     * Parse the result buffer from WASM into a mesh structure
+     */
+    private static parseMeshResult(ptr: number, inputPtr: number, valuesPtr: number, rowSizesPtr: number): Mesh {
+        if (ptr === 0) {
+            this.module._free(inputPtr);
+            this.module._free(valuesPtr);
+            this.module._free(rowSizesPtr);
+            return null;
+        }
 
-		while (polygonVertexCount > 0) {
-			const polygon = [];
+        let offset = ptr / 4;
+        const arrayU32 = this.module.HEAPU32;
+        const arrayF32 = this.module.HEAPF32;
 
-			for (let i = 0; i < polygonVertexCount; i++) {
-				polygon.push(arrayU32[offset++]);
-			}
+        const vertices: Vertex[] = [];
+        const faces: number[][] = [];
 
-			polygons.push(polygon);
-			polygonVertexCount = arrayU32[offset++];
-		}
+        const vertexCount = arrayU32[offset++];
 
-		this.module._free(ptr);
-		this.module._free(inputPtr);
-		this.module._free(weightsPtr);
+        for (let i = 0; i < vertexCount; i++) {
+            const x = arrayF32[offset++];
+            const y = arrayF32[offset++];
+            const z = arrayF32[offset++];
 
-		return { vertices, polygons };
-	}
+            vertices.push([x, y, z]);
+        }
 
-	private static checkModule(): void {
-		if (this.module === null) {
-			throw new Error('The WebAssembly module has not been initialized, call SkeletonBuilder.init() first.');
-		}
-	}
+        const faceCount = arrayU32[offset++];
+        
+        for (let i = 0; i < faceCount; i++) {
+            const vertexCount = arrayU32[offset++];
+            const face: number[] = [];
+            
+            for (let j = 0; j < vertexCount; j++) {
+                face.push(arrayU32[offset++]);
+            }
+            
+            faces.push(face);
+        }
 
-	private static serializeInput(input: number[][][]): ArrayBuffer {
-		let size: number = 1;
+        this.module._free(ptr);
+        this.module._free(inputPtr);
+        this.module._free(valuesPtr);
+        this.module._free(rowSizesPtr);
 
-		for (const ring of input) {
-			size += 1 + (ring.length - 1) * 2;
-		}
+        return { vertices, faces };
+    }
 
-		const uint32Array = new Uint32Array(size);
-		const float32Array = new Float32Array(uint32Array.buffer);
-		let offset = 0;
+    /**
+     * Validate that weights/angles arrays match polygon structure
+     */
+    private static validateWeights(coordinates: number[][][], values: number[][]): void {
+        // Validate the values length
+        if (values.length !== coordinates.length) {
+            throw new Error('Values array length does not match the number of rings in the polygon.');
+        }
+        for (let i = 0; i < values.length; i++) {
+            if (values[i].length !== coordinates[i].length - 1) {
+                throw new Error(`Values array length for ring ${i} does not match the number of points in the ring.`);
+            }
+        }
+    }
 
-		for (const ring of input) {
-			uint32Array[offset++] = ring.length - 1;
+    private static checkModule(): void {
+        if (this.module === null) {
+            throw new Error('The WebAssembly module has not been initialized, call MeshBuilder.init() first.');
+        }
+    }
 
-			for (let i = 0; i < ring.length - 1; i++) {
-				float32Array[offset++] = ring[i][0];
-				float32Array[offset++] = ring[i][1];
-			}
-		}
+    private static serializeInput(input: number[][][]): ArrayBuffer {
+        let size: number = 1;
 
-		uint32Array[offset++] = 0;
-		return float32Array.buffer;
-	}
+        for (const ring of input) {
+            size += 1 + (ring.length - 1) * 2;
+        }
+
+        const uint32Array = new Uint32Array(size);
+        const float32Array = new Float32Array(uint32Array.buffer);
+        let offset = 0;
+
+        for (const ring of input) {
+            uint32Array[offset++] = ring.length - 1;
+
+            for (let i = 0; i < ring.length - 1; i++) {
+                float32Array[offset++] = ring[i][0];
+                float32Array[offset++] = ring[i][1];
+            }
+        }
+
+        uint32Array[offset++] = 0;
+        return float32Array.buffer;
+    }
 }
