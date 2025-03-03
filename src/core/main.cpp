@@ -17,182 +17,232 @@
 #include <CGAL/create_weighted_straight_skeleton_from_polygon_with_holes_2.h>
 #include <CGAL/create_straight_skeleton_from_polygon_with_holes_2.h>
 #include <CGAL/Straight_skeleton_2/IO/print.h>
+#include <CGAL/Surface_mesh.h>
+#include <CGAL/extrude_skeleton.h>
 #include <boost/shared_ptr.hpp>
 #include <cassert>
+#include <cmath>
 
 // Override make_certain to fix errors. Not sure why Uncertain doesn't work properly in Wasm environment.
 template <>
 bool CGAL::Uncertain<bool>::make_certain() const
 {
-	return _i;
+    return _i;
 }
 
 template <>
 CGAL::Sign CGAL::Uncertain<CGAL::Sign>::make_certain() const
 {
-	return _i;
+    return _i;
 }
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
-typedef K::Point_2 Point;
+typedef K::Point_2 Point_2;
+typedef K::Point_3 Point_3;
+typedef K::FT FT;  // This is likely a double in most implementations
 typedef CGAL::Polygon_2<K> Polygon_2;
 typedef CGAL::Polygon_with_holes_2<K> Polygon_with_holes;
 typedef CGAL::Straight_skeleton_2<K> Ss;
 typedef boost::shared_ptr<Ss> SsPtr;
+typedef CGAL::Surface_mesh<Point_3> Mesh;
 typedef CGAL::Exact_predicates_inexact_constructions_kernel CGAL_KERNEL;
 
-// Decodes rings from data and generates a weighted skeleton from them.
-// Data contains a list of rings, each ring is represented by a number of points (uint32_t), followed by the points
-// themselves (each point is represented by 2 floats: x, y).
-// The last value is 0.
-// Additionally, a vector of weights is provided, where each weight corresponds to a vertex.
-SsPtr generate_weighted_skeleton(void *data, const std::vector<std::vector<float>> &weights)
+// Serializes a mesh into a format that can be sent to the JS side.
+// Format:
+// 1. Number of vertices (uint32_t)
+// 2. Vertices (x,y,z) as triples of floats
+// 3. Number of faces (uint32_t)
+// 4. For each face: number of vertices (uint32_t) followed by vertex indices (uint32_t)
+void* serialize_mesh(const Mesh& mesh)
 {
-	uint32_t *data_uint32 = (uint32_t *)data;
-	uint32_t points = data_uint32[0];
+    if (mesh.num_vertices() == 0)
+    {
+        return nullptr;
+    }
 
-	assert(points != 0);
-	assert(points > 2);
+    // Count total size needed
+    size_t num_vertices = mesh.num_vertices();
+    size_t num_faces = mesh.num_faces();
+    size_t total_face_vertices = 0;
+    
+    for (Mesh::Face_index face_index : mesh.faces())
+    {
+        for (Mesh::Vertex_index v : CGAL::vertices_around_face(mesh.halfedge(face_index), mesh))
+        {
+            total_face_vertices++;
+        }
+    }
 
-	++data_uint32;
+    // Calculate total buffer size (in uint32_t units)
+    size_t total_size = 1 + (num_vertices * 3) + 1 + num_faces + total_face_vertices;
+    
+    // Allocate buffer
+    uint32_t* data = (uint32_t*)malloc(total_size * sizeof(uint32_t));
+    float* data_float = (float*)data;
+    size_t index = 0;
 
-	Polygon_2 outer;
-	Polygon_2 hole;
-	Polygon_with_holes poly;
-	bool outer_set = false;
-
-	while (points != 0)
-	{
-		Polygon_2 *target = outer_set ? &hole : &outer;
-
-		for (long i = 0; i < points; i++)
-		{
-			float x = *((float *)data_uint32 + i * 2);
-			float y = *((float *)data_uint32 + i * 2 + 1);
-
-			target->push_back(Point(x, y));
-		}
-
-		data_uint32 += points * 2;
-
-		points = data_uint32[0];
-
-		++data_uint32;
-
-		if (!outer_set)
-		{
-			assert(outer.is_counterclockwise_oriented());
-			poly = Polygon_with_holes(outer);
-			outer_set = true;
-		}
-		else
-		{
-			assert(hole.is_clockwise_oriented());
-			poly.add_hole(hole);
-			hole.clear();
-		}
-	}
-
-	return CGAL::create_interior_weighted_straight_skeleton_2(poly, weights, CGAL_KERNEL());
+    // Store vertex count
+    data[index++] = num_vertices;
+    
+    // Store vertices
+    std::vector<Mesh::Vertex_index> vertex_indices;
+    for (Mesh::Vertex_index v : mesh.vertices())
+    {
+        vertex_indices.push_back(v);
+        Point_3 p = mesh.point(v);
+        data_float[index++] = static_cast<float>(CGAL::to_double(p.x()));
+        data_float[index++] = static_cast<float>(CGAL::to_double(p.y()));
+        data_float[index++] = static_cast<float>(CGAL::to_double(p.z()));
+    }
+    
+    // Store face count
+    data[index++] = num_faces;
+    
+    // Store faces
+    for (Mesh::Face_index face_index : mesh.faces())
+    {
+        // Count vertices in this face
+        size_t face_vertex_count = 0;
+        for (Mesh::Vertex_index v : CGAL::vertices_around_face(mesh.halfedge(face_index), mesh))
+        {
+            face_vertex_count++;
+        }
+        
+        // Store vertex count for this face
+        data[index++] = face_vertex_count;
+        
+        // Store vertex indices for this face
+        for (Mesh::Vertex_index v : CGAL::vertices_around_face(mesh.halfedge(face_index), mesh))
+        {
+            // Find the index of the vertex in our vertex_indices array
+            auto it = std::find(vertex_indices.begin(), vertex_indices.end(), v);
+            data[index++] = std::distance(vertex_indices.begin(), it);
+        }
+    }
+    
+    return data;
 }
 
-// Serializes a skeleton into a format that can be sent to the JS side.
-// The first part of the data describes the vertices:
-// The first value (uint32_t) specifies the number of vertices.
-// After that, each vertex is represented by 3 floats: x, y, time.
-// Then, the second part describes the faces:
-// Each face is represented by a uint32_t specifying the number of vertices in the face, followed by the indices
-// of its vertices (also uint32_t).
-// The last value is 0.
-void *serialize_skeleton(SsPtr iss)
+// Decodes rings from data and generates a polygon with holes
+Polygon_with_holes decode_polygon(void* data)
 {
-	if (iss == nullptr)
-	{
-		return nullptr;
-	}
+    uint32_t* data_uint32 = (uint32_t*)data;
+    uint32_t points = data_uint32[0];
 
-	std::unordered_map<Ss::Vertex_const_handle, int> vertex_map;
-	std::vector<std::tuple<float, float, float>> vertices;
+    assert(points != 0);
+    assert(points > 2);
 
-	for (auto vertex = iss->vertices_begin(); vertex != iss->vertices_end(); ++vertex)
-	{
-		CGAL::Point_2 point = vertex->point();
+    ++data_uint32;
 
-		vertices.emplace_back(point.x(), point.y(), vertex->time());
-		vertex_map[vertex] = vertices.size() - 1;
-	}
+    Polygon_2 outer;
+    Polygon_2 hole;
+    Polygon_with_holes poly;
+    bool outer_set = false;
 
-	std::vector<std::vector<uint32_t>> faces;
-	int total_vertices = 0;
+    while (points != 0)
+    {
+        Polygon_2* target = outer_set ? &hole : &outer;
 
-	for (auto face = iss->faces_begin(); face != iss->faces_end(); ++face)
-	{
-		std::vector<uint32_t> face_polygon;
+        for (long i = 0; i < points; i++)
+        {
+            float x = *((float*)data_uint32 + i * 2);
+            float y = *((float*)data_uint32 + i * 2 + 1);
 
-		for (auto h = face->halfedge();;)
-		{
-			auto vertex_index = (uint32_t)vertex_map[h->vertex()];
-			face_polygon.push_back(vertex_index);
-			++total_vertices;
+            target->push_back(Point_2(x, y));
+        }
 
-			h = h->next();
+        data_uint32 += points * 2;
 
-			if (h == face->halfedge())
-			{
-				break;
-			}
-		}
+        points = data_uint32[0];
 
-		faces.emplace_back(face_polygon);
-	}
+        ++data_uint32;
 
-	int total_size = 1 + vertices.size() * 3 + faces.size() + total_vertices + 1;
-	uint32_t *data = (uint32_t *)malloc(total_size * sizeof(uint32_t));
-	float *data_float = (float *)data;
-	int i = 0;
+        if (!outer_set)
+        {
+            assert(outer.is_counterclockwise_oriented());
+            poly = Polygon_with_holes(outer);
+            outer_set = true;
+        }
+        else
+        {
+            assert(hole.is_clockwise_oriented());
+            poly.add_hole(hole);
+            hole.clear();
+        }
+    }
 
-	data[i++] = vertices.size();
+    return poly;
+}
 
-	for (auto vertex : vertices)
-	{
-		data_float[i++] = std::get<0>(vertex);
-		data_float[i++] = std::get<1>(vertex);
-		data_float[i++] = std::get<2>(vertex);
-	}
-
-	for (auto face : faces)
-	{
-		data[i++] = face.size();
-
-		for (auto vertex_index : face)
-		{
-			data[i++] = vertex_index;
-		}
-	}
-
-	data[i++] = 0;
-
-	return data;
+// Generate a 3D mesh from a polygon with holes, using either angles or weights
+Mesh generate_extruded_mesh(const Polygon_with_holes& pwh, 
+                          const std::vector<std::vector<double>>& values,
+                          bool use_angles,
+                          double height)
+{
+    Mesh mesh;
+    
+    if (use_angles)
+        CGAL::extrude_skeleton(pwh, mesh, CGAL::parameters::angles(values).maximum_height(height));
+    else
+        CGAL::extrude_skeleton(pwh, mesh, CGAL::parameters::weights(values).maximum_height(height));
+        
+    return mesh;
 }
 
 extern "C"
 {
-	EMSCRIPTEN_KEEPALIVE
-	void *create_weighted_straight_skeleton(void *data, float *weightsPtr, unsigned int *rowSizesPtr, unsigned int rowCount)
-	{
-		std::vector<std::vector<float>> polygonWeights;
+    EMSCRIPTEN_KEEPALIVE
+    void* create_weighted_straight_skeleton(void* data, float* weightsPtr, unsigned int* rowSizesPtr, unsigned int rowCount, float height)
+    {
+        std::vector<std::vector<double>> polygonWeights;
 
-		unsigned int offset = 0;
-		for (unsigned int i = 0; i < rowCount; ++i)
-		{
-			unsigned int rowSize = rowSizesPtr[i];
-			std::vector<float> row(weightsPtr + offset, weightsPtr + offset + rowSize);
-			polygonWeights.push_back(row);
-			offset += rowSize;
-		}
+        unsigned int offset = 0;
+        for (unsigned int i = 0; i < rowCount; ++i)
+        {
+            unsigned int rowSize = rowSizesPtr[i];
+            
+            // Convert float weights to double
+            std::vector<double> row;
+            row.reserve(rowSize);
+            for (unsigned int j = 0; j < rowSize; ++j) {
+                row.push_back(static_cast<double>(weightsPtr[offset + j]));
+            }
+            
+            polygonWeights.push_back(std::move(row));
+            offset += rowSize;
+        }
 
-		SsPtr skeleton = generate_weighted_skeleton(data, polygonWeights);
+        Polygon_with_holes pwh = decode_polygon(data);
+        Mesh mesh = generate_extruded_mesh(pwh, polygonWeights, false, static_cast<double>(height));
 
-		return serialize_skeleton(skeleton);
-	}
+        return serialize_mesh(mesh);
+    }
+    
+    EMSCRIPTEN_KEEPALIVE
+    void* create_angle_straight_skeleton(void* data, float* anglesPtr, unsigned int* rowSizesPtr, unsigned int rowCount, float height)
+    {
+        std::vector<std::vector<double>> polygonAngles;
+
+        unsigned int offset = 0;
+        for (unsigned int i = 0; i < rowCount; ++i)
+        {
+            unsigned int rowSize = rowSizesPtr[i];
+            
+            // Convert float angles to double
+            std::vector<double> row;
+            row.reserve(rowSize);
+            for (unsigned int j = 0; j < rowSize; ++j) {
+                row.push_back(static_cast<double>(anglesPtr[offset + j]));
+            }
+            
+            polygonAngles.push_back(std::move(row));
+            offset += rowSize;
+        }
+
+        Polygon_with_holes pwh = decode_polygon(data);
+        Mesh mesh = generate_extruded_mesh(pwh, polygonAngles, true, static_cast<double>(height));
+
+        return serialize_mesh(mesh);
+    }
 }

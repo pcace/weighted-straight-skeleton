@@ -80,6 +80,67 @@
                 justify-content: space-between;
                 align-items: center;
             }
+            
+            .mode-toggle {
+                margin: 12px 0;
+                display: flex;
+                align-items: center;
+            }
+            
+            .mode-toggle label {
+                cursor: pointer;
+                margin-left: 8px;
+                user-select: none;
+            }
+            
+            .toggle-switch {
+                position: relative;
+                display: inline-block;
+                width: 50px;
+                height: 24px;
+            }
+            
+            .toggle-switch input {
+                opacity: 0;
+                width: 0;
+                height: 0;
+            }
+            
+            .slider {
+                position: absolute;
+                cursor: pointer;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-color: #ccc;
+                transition: .4s;
+                border-radius: 24px;
+            }
+            
+            .slider:before {
+                position: absolute;
+                content: "";
+                height: 16px;
+                width: 16px;
+                left: 4px;
+                bottom: 4px;
+                background-color: white;
+                transition: .4s;
+                border-radius: 50%;
+            }
+            
+            input:checked + .slider {
+                background-color: #2196F3;
+            }
+            
+            input:focus + .slider {
+                box-shadow: 0 0 1px #2196F3;
+            }
+            
+            input:checked + .slider:before {
+                transform: translateX(26px);
+            }
         </style>
     </head>
     <body>
@@ -98,15 +159,25 @@
                     <button class="sample" data-sample="3">Sample polygon #4</button>
                 </div>
                 <textarea id="input" ></textarea>
+                <div class="mode-toggle">
+                    <span>Extrusion mode:</span>
+                    <div class="toggle-container">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="useAngles">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <label for="useAngles">Use angles instead of weights</label>
+                </div>
                 <div class="btns-bottom">
                     <span>Last update took <span id="time"></span></span>
-                    <button id="update">Update straight skeleton</button>
+                    <button id="update">Update 3D extrusion</button>
                 </div>
             </div>
             <div class="preview">
-                <p>2D straight skeleton preview</p>
+                <p>2D base outline</p>
                 <canvas id="canvas2d"></canvas>
-                <p>3D straight skeleton preview</p>
+                <p>3D extrusion preview</p>
                 <canvas id="canvas3d"></canvas>
             </div>
         </div>
