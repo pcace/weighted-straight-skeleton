@@ -2,7 +2,8 @@
 	"name": "weighted-straight-skeleton",
 	"version": "1.0.0",
 	"description": "Weighted straight skeleton algorithm",
-	"main": "dist/index.js",
+	"main": "dist/index.node.js",
+	"browser": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"files": [
 		"dist",
