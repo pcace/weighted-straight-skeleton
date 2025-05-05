@@ -27,6 +27,17 @@ module.exports = [
 		},
 		resolve: {
 			extensions: [".ts", ".js"],
+            fallback: {
+                // Just use empty modules instead of polyfills
+                "path": false,
+                "fs": false,
+                "crypto": false,
+                "stream": false,
+                "buffer": false,
+                "util": false,
+            },
+
+
 		},
 	},
 	{
