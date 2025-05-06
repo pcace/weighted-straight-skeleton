@@ -18,26 +18,26 @@
 		"url": "https://github.com/pcace/weighted-straight-skeleton"
 	},
 	"scripts": {
-		"build": "webpack --config webpack.config.js --mode=production",
-		"dev": "webpack serve --config webpack.config.js --mode=development",
+		"build": "cd src/core/build/ && emcmake cmake .. && emmake make && cd ../../../ && rollup -c rollup.config.mjs",
+		"dev": "rollup -c rollup.config.mjs -w",
 		"prepare": "npm run build"
 	},
 	"devDependencies": {
+		"@rollup/plugin-commonjs": "^28.0.3",
+		"@rollup/plugin-node-resolve": "^16.0.1",
+		"@rollup/plugin-replace": "^6.0.2",
+		"@rollup/plugin-terser": "^0.4.4",
+		"@rollup/plugin-typescript": "^12.1.2",
 		"@types/earcut": "^2.1.1",
 		"@types/geojson": "^7946.0.10",
 		"@types/geojson-validation": "^1.0.0",
 		"@types/three": "^0.155.1",
-		"clean-webpack-plugin": "^4.0.0",
 		"earcut": "^2.2.4",
 		"geojson-validation": "^1.0.2",
-		"html-webpack-plugin": "^5.5.0",
-		"node-polyfill-webpack-plugin": "^4.1.0",
+		"rollup": "^4.40.1",
+		"rollup-plugin-dts": "^6.2.1",
 		"three": "^0.150.1",
-		"ts-loader": "^9.2.6",
-		"typescript": "^4.5.2",
-		"webpack": "^5.64.4",
-		"webpack-cli": "^4.10.0",
-		"webpack-dev-server": "^4.6.0"
+		"typescript": "^4.5.2"
 	},
 	"packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }
