@@ -18,7 +18,8 @@
 		"url": "https://github.com/pcace/weighted-straight-skeleton"
 	},
 	"scripts": {
-		"build": "cd src/core/build/ && emcmake cmake .. && emmake make && cd ../../../ && rollup -c rollup.config.mjs",
+		"build": "rollup -c rollup.config.mjs",
+		"embuild" : "cd src/core/build/ && emcmake cmake .. && emmake make && cd ../../../",
 		"dev": "rollup -c rollup.config.mjs -w",
 		"prepare": "npm run build"
 	},
