@@ -36,8 +36,20 @@ export class MeshBuilder {
      * Initializes the WebAssembly module. Must be called before any other method.
      */
     public static async init(): Promise<void> {
-        return Module().then((library: WasmModule) => {
-            this.module = library;
+        if (this.module) return Promise.resolve();
+        
+        return new Promise<void>((resolve, reject) => {
+            try {
+                // Handle ES Module and CommonJS loading patterns
+                const modulePromise = typeof Module === 'function' ? Module() : Promise.resolve(Module);
+                
+                modulePromise.then((library: WasmModule) => {
+                    this.module = library;
+                    resolve();
+                }).catch(reject);
+            } catch (error) {
+                reject(new Error(`Failed to initialize WebAssembly module: ${error.message}`));
+            }
         });
     }
 
@@ -98,7 +110,7 @@ export class MeshBuilder {
      * @param angles The angles for each edge (in degrees).
      * @param height The maximum height of the extrusion.
      */
-    public static buildFromGeoJSONPolygonWithAngles(polygon: GeoJSON.Polygon, angles: number[][], height: number = 10): Mesh {
+    public static buildFromGeoJSONPolygonWithAngles(polygon: GeoJSON.Polygon, angles: number[][], height = 10): Mesh {
         this.checkModule();
         return this.buildFromPolygonWithAngles(polygon.coordinates, angles, height);
     }
@@ -210,7 +222,7 @@ export class MeshBuilder {
     }
 
     private static serializeInput(input: number[][][]): ArrayBuffer {
-        let size: number = 1;
+        let size = 1;
 
         for (const ring of input) {
             size += 1 + (ring.length - 1) * 2;

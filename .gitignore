@@ -5,3 +5,4 @@ dist
 src/core/build/*
 !src/core/build/*.js
 src/core/lib
+*.tgz
