@@ -9,6 +9,7 @@ You can use this library to generate weighted straight skeletons of polygons wit
 
 `npm i weighted-straight-skeleton`
 
+
 ## Usage
 
 This library supports both arrays of points (`SkeletonBuilder.buildFromPolygon`) and [GeoJSON polygons](https://datatracker.ietf.org/doc/html/rfc7946#autoid-15) (`SkeletonBuilder.buildFromGeoJSON`).
