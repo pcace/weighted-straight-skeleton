@@ -28,7 +28,7 @@ add to your package.json
 ```json
 	"weighted-straight-skeleton": "github:pcace/weighted-straight-skeleton#main"
 ``` 
-then run `npm install`
+then run `pnpm install`
 
 #### Using Weights
 
@@ -133,14 +133,14 @@ SkeletonBuilder.init().then(() => {
 Note: Tested with emscripten version 3.1.16
 
 1. Clone this repository.
-2. Run `npm i` to install dependencies.
+2. Run `pnpm install` to install dependencies.
 3. Optionally, rebuild the Wasm module:
    1. Install [Emscripten](https://emscripten.org/docs/getting_started/downloads.html) and make sure that it's in your PATH.
    2. `cd src/core`, then `sh ./install_libraries.sh` to download and unpack all dependencies.
    3. `mkdir build && cd build` to create a build directory.
    4. `emcmake cmake ..` to generate the build files.
    5. `emmake make` to build the Wasm module. Rerun this whenever your .cpp files change.
-4. Run `npm run build` to build the library or `npm run dev` to start a development server that watches for changes.
+4. Run `pnpm run build` to build the library or `pnpm run dev` to start a development server that watches for changes.
 
 ## References
 
